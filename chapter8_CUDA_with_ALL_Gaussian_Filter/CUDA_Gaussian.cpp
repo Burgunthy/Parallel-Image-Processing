@@ -58,7 +58,7 @@ void CUDA_Gaussian(Mat &src, Mat &dst, int w, int h, int kernel_size, float *ker
 	cudaFree(pcuGkernel);
 }
 
-int cudamain() {
+int main() {
 
 	Mat pInput = imread("Knee.jpg", 0);
 	resize(pInput, pInput, Size(6024, 6024));

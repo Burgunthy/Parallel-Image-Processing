@@ -40,15 +40,13 @@ void OpenMP_Gaussian(Mat &src, Mat &dst, int w, int h, int kernel_size, float *k
 		temp = 0.f;
 
 		// kernel_size에 해당하지 않는 boundary 부분 예외 처리
-		if ((index % w >= mSize) && (index / w >= mSize)
-			&& (index % w < w - mSize) && (index / w < h - mSize))
+		if ((index % w >= mSize) && (index / w >= mSize) && (index % w < w - mSize) && (index / w < h - mSize))
 		{
 			for (int j = -mSize; j <= mSize; j++) {
 				for (int i = -mSize; i <= mSize; i++) {
 
 					// float으로 계산한다
-					temp += (float)src.data[index + i + j * w]
-						* kernel[i + mSize + (j + mSize) * kernel_size];
+					temp += (float)src.data[index + i + j * w] * kernel[i + mSize + (j + mSize) * kernel_size];
 				}
 			}
 			// uchar의 형태로 저장한다
@@ -59,7 +57,7 @@ void OpenMP_Gaussian(Mat &src, Mat &dst, int w, int h, int kernel_size, float *k
 	}
 }
 
-int fffwmain() {
+int wmain() {
 	// src, dst 이미지 선언
 	Mat pInput = imread("Knee.jpg", 0);
 	resize(pInput, pInput, Size(6024, 6024));

@@ -52,7 +52,7 @@ void Serial_Gaussian(Mat &src, Mat &dst, int w, int h, int kernel_size, float *k
 	}
 }
 
-int ssemain() {
+int main() {
 	// src, dst 이미지 선언
 	Mat pInput = imread("Knee.jpg", 0);
 	//resize(pInput, pInput, Size(1024, 1024));
