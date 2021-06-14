@@ -16,27 +16,29 @@
 using namespace std;
 using namespace cv;
 
-#define num 16
+#define num 100
 #define resultWidth 1024
 #define resultHeight 1024
 
 #define localWidth (resultWidth / (sqrt(num)))
 #define localHeight (resultHeight / (sqrt(num)))
 
+// 시간 계산
 float fpssum = 0.f;
 int iteration = 0;
+int finish = 0;
 
 // cu파일과의 연동을 위해 main code에 extern "C"로 함수 선언
 extern "C" void CUDA_Gaussian_Filter(uchar *pcuSrc, uchar *pcuDst, int w, int h, float *cuGkernel, int kernel_size);
 
 // 비디오 불러오기
-bool getFrame(Mat *frame, VideoCapture *cap) {
+void getFrame(Mat *frame, VideoCapture *cap) {
 #pragma omp parallel for
 	for (int i = 0; i < num; i++) {
 		cap[i] >> frame[i];
 		if (frame[i].empty()) {
-			cout << "mosiac finish!!\n";
-			cout << "avg fps : " << fpssum / iteration << endl;
+			finish = 1;
+			break;
 		}
 	}
 }
@@ -101,7 +103,7 @@ void ompDownsampling(Mat &src, Mat&dst, int width, int height) {
 
 void ippGaussianDownsampling(Mat &src, Mat&dst, int ksize, int width, int height) {
 
-	ippGaussianBlur(src, src, src.cols, src.rows, ksize, 3);
+	ippGaussianBlur(src, src, src.cols, src.rows, ksize, 1);
 	ompDownsampling(src, dst, width, height);
 }
 
@@ -186,20 +188,40 @@ void makeMosaic(Mat *frame, Mat result) {
 	}
 }
 
-void Downsampling(Mat *frame, int *ksize, int maxksize, float *kernel, int width, int height) {
+void Downsampling(Mat *frame, int *ksize, float *kernel3, float *kernel5, float *kernel7,
+	int width, int height) {
 #pragma omp parallel for
 	for (int i = 0; i < num; i++) {
-		ippGaussianDownsampling(frame[i], frame[i], ksize[i], width, height);
-		//cudaGaussianDownsampling(frame[i], frame[i], width, height, maxksize, kernel);
+		//ippGaussianDownsampling(frame[i], frame[i], ksize[i], width, height);
+
+		switch (ksize[i]) {
+		case 3:
+			cudaGaussianDownsampling(frame[i], frame[i], width, height, ksize[i], kernel3);
+			break;
+		case 5:
+			cudaGaussianDownsampling(frame[i], frame[i], width, height, ksize[i], kernel5);
+			break;
+		case 7:
+			cudaGaussianDownsampling(frame[i], frame[i], width, height, ksize[i], kernel7);
+			break;
+		}
 	}
 }
 
 int main() {
 
-	int kernel_size = 5;
-	int sigma = 3;
-	float *Gkernel = new float[kernel_size * kernel_size];
-	Gaussian_Kernel_2D(kernel_size, sigma, Gkernel);
+	int kernel_size = 3;
+	int sigma = 1;
+	float *kernel3 = new float[kernel_size * kernel_size];
+	Gaussian_Kernel_2D(kernel_size, sigma, kernel3);
+
+	kernel_size = 5;
+	float *kernel5 = new float[kernel_size * kernel_size];
+	Gaussian_Kernel_2D(kernel_size, sigma, kernel5);
+
+	kernel_size = 7;
+	float *kernel7 = new float[kernel_size * kernel_size];
+	Gaussian_Kernel_2D(kernel_size, sigma, kernel7);
 
 	string *strVideo = new string[num];
 	VideoCapture *cap = new VideoCapture[num];
@@ -208,16 +230,20 @@ int main() {
 	Mat result = Mat(resultHeight, resultWidth, CV_8UC3, Scalar(0, 0, 0));
 
 	for (int i = 0; i < num; i++) {
-		strVideo[i] = to_string(i) + ".mp4";
+		strVideo[i] = to_string(5) + ".mp4";
 		cap[i] = VideoCapture(strVideo[i]);
 	}
 
+	// frame을 불러온다. localWidth에  따라 이미지별 kerenl size 선택
 	getFrame(frame, cap);
 	int krate;
 	int *ksize = new int[num];
 	for (int i = 0; i < num; i++) {
 		krate = frame[i].cols / localWidth;
 		ksize[i] = (krate % 2 == 0) ? krate + 1 : krate;
+		// 3 <= kernl size <= 7
+		if (ksize[i] < 3) ksize[i] = 3;
+		else if (ksize[i] > 7) ksize[i] = 7;
 	}
 
 	double fstart, fend, fprocTime;
@@ -228,9 +254,11 @@ int main() {
 
 		// get videos using OpenMP
 		getFrame(frame, cap);
+		if (finish) break;			// frame 존재하지 않을 시 종료
 
 		// downsampling videos
-		Downsampling(frame, ksize, kernel_size, Gkernel, localWidth, localHeight);
+		Downsampling(frame, ksize, kernel3, kernel5, kernel7,
+			localWidth, localHeight);
 
 		// Merge all videos
 		makeMosaic(frame, result);
@@ -247,8 +275,14 @@ int main() {
 		iteration++;	fpssum += fps;
 
 		imshow("result", result);
-		if (waitKey(27) == 27) break;
+		if (waitKey(27) == 27) {
+			imwrite("result.png", result);
+			break;
+		}
 	}
+
+	cout << "mosiac finish!!\n";
+	cout << "avg fps : " << fpssum / iteration << endl;
 
 	return 0;
 }
